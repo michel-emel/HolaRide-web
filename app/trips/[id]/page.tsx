@@ -6,7 +6,7 @@ import {Star,Users,Calendar,MapPin,Car,ChevronLeft,CheckCircle,MessageCircle} fr
 import {api,fmt,fmtDate,fmtTime} from "../../lib/api";
 import {useAuth} from "../../lib/context";
 
-interface Trip{id:string;origin_city:string;destination_city:string;origin_location:string;destination_location:string;departure_time:string;price_per_seat:number;available_seats:number;driver_name:string;driver_rating_average?:number|null;driver_rating_count:number;vehicle_label:string;status:string;}
+interface Trip{id:string;departure_city:string;destination_city:string;departure_location:string;destination_location:string;departure_date:string;departure_time:string;price_per_seat:number;available_seats:number;driver_first_name?:string;driver_last_name?:string;driver_rating_average?:number|null;driver_rating_count:number;vehicle_brand?:string;vehicle_model?:string;vehicle_category:string;status:string;}
 
 export default function TripDetailPage(){
   const {id}=useParams<{id:string}>();
@@ -28,7 +28,7 @@ export default function TripDetailPage(){
     if(!user){router.push(`/login?redirect=/trips/${id}`);return;}
     setError("");setBooking(true);
     try{
-      await api.post("/bookings",{trip_id:id,seats_booked:seats,payment_type:payOpt==="partial"?"partial_80":"full"},token);
+      await api.post(`/trips/${id}/bookings`,{seats_booked:seats,payment_type:payOpt==="partial"?"partial_80":"full"},token);
       setSuccess(true);
     }catch(e:unknown){setError(e instanceof Error?e.message:"Booking failed. Please try again.");}
     finally{setBooking(false);}
@@ -45,7 +45,7 @@ export default function TripDetailPage(){
     <div className="page" style={{textAlign:"center",padding:"80px 24px"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"var(--green-p)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:"var(--green)"}}><CheckCircle size={40}/></div>
       <h2 className="h2 mb-3">Booking request sent!</h2>
-      <p className="lead mb-2">Your request was sent to <strong>{trip.driver_name}</strong>.</p>
+      <p className="lead mb-2">Your request was sent to <strong>{([trip.driver_first_name,trip.driver_last_name].filter(Boolean).join(" ")||"Driver")}</strong>.</p>
       <p className="text-muted text-sm mb-8">You'll be notified once the driver responds. Payment is collected only after acceptance.</p>
       <div className="flex gap-3 justify-center flex-wrap">
         <Link href="/my-bookings" className="btn btn-primary btn-lg">View my bookings</Link>
@@ -68,16 +68,16 @@ export default function TripDetailPage(){
           <div className="card card-p mb-4">
             <h3 className="h4 mb-4" style={{paddingBottom:12,borderBottom:"1px solid var(--border)"}}>Driver</h3>
             <div className="flex items-center gap-3">
-              <div className="avatar" style={{width:56,height:56,fontSize:"1.25rem"}}>{trip.driver_name[0]?.toUpperCase()||"?"}</div>
+              <div className="avatar" style={{width:56,height:56,fontSize:"1.25rem"}}>{([trip.driver_first_name,trip.driver_last_name].filter(Boolean).join(" ")||"Driver")[0]?.toUpperCase()||"?"}</div>
               <div>
-                <div style={{fontWeight:700,fontSize:"1rem"}}>{trip.driver_name}</div>
+                <div style={{fontWeight:700,fontSize:"1rem"}}>{([trip.driver_first_name,trip.driver_last_name].filter(Boolean).join(" ")||"Driver")}</div>
                 {trip.driver_rating_count>0&&(
                   <div className="flex items-center gap-2 text-sm mt-1">
                     <span className="flex items-center gap-1"><Star size={14} fill="var(--gold)" color="var(--gold)"/><strong>{trip.driver_rating_average?.toFixed(1)}</strong></span>
                     <span className="text-muted">({trip.driver_rating_count} rating{trip.driver_rating_count!==1?"s":""})</span>
                   </div>
                 )}
-                <div className="flex items-center gap-1 text-sm text-muted mt-1"><Car size={13}/>{trip.vehicle_label}</div>
+                <div className="flex items-center gap-1 text-sm text-muted mt-1"><Car size={13}/>{([trip.vehicle_brand,trip.vehicle_model].filter(Boolean).join(" ")||trip.vehicle_category)}</div>
               </div>
             </div>
           </div>
@@ -89,8 +89,8 @@ export default function TripDetailPage(){
               <div className="route-line"><div className="dot-start"/><div className="line-mid"/><div className="dot-end"/></div>
               <div className="route-text">
                 <div style={{marginBottom:16}}>
-                  <div style={{fontWeight:700,fontSize:"1.05rem"}}>{trip.origin_city}</div>
-                  <div className="flex items-center gap-1 text-sm text-muted mt-1"><MapPin size={13}/>{trip.origin_location}</div>
+                  <div style={{fontWeight:700,fontSize:"1.05rem"}}>{trip.departure_city}</div>
+                  <div className="flex items-center gap-1 text-sm text-muted mt-1"><MapPin size={13}/>{trip.departure_location}</div>
                 </div>
                 <div>
                   <div style={{fontWeight:700,fontSize:"1.05rem"}}>{trip.destination_city}</div>

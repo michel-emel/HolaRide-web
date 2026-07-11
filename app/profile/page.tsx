@@ -2,25 +2,25 @@
 import {useState,useEffect} from "react";
 import {useRouter} from "next/navigation";
 import Link from "next/link";
-import {User,Phone,BookOpen,Car,MessageCircle,Bell,LogOut,Shield,Star,Edit3} from "lucide-react";
-import {api,fmt} from "../lib/api";
+import {User,Phone,BookOpen,Car,MessageCircle,Bell,LogOut,Shield,ArrowLeftRight} from "lucide-react";
+import {api} from "../lib/api";
 import {useAuth} from "../lib/context";
 
 export default function ProfilePage(){
-  const {user,token,logout,isDriver}=useAuth();
+  const {user,token,logout,isDriver,isDriverMode,setMode,mode}=useAuth();
   const router=useRouter();
-  const [stats,setStats]=useState({trips:0,bookings:0,rating:null as number|null,ratingCount:0});
+  const [stats,setStats]=useState({trips:0,bookings:0});
 
   useEffect(()=>{
     if(!user) return;
-    api.get("/me",token).catch(()=>{});
     Promise.all([
       api.get("/bookings/me",token).catch(()=>[]),
       api.get("/drivers/trips",token).catch(()=>[]),
     ]).then(([b,t])=>{
-      const bookings=Array.isArray(b)?b:b.bookings||[];
-      const trips=Array.isArray(t)?t:t.trips||[];
-      setStats(s=>({...s,bookings:bookings.length,trips:trips.length}));
+      setStats({
+        bookings:(Array.isArray(b)?b:b.bookings||[]).length,
+        trips:(Array.isArray(t)?t:t.trips||[]).length,
+      });
     });
   },[user]);
 
@@ -46,12 +46,22 @@ export default function ProfilePage(){
         {/* Left */}
         <div>
           {/* Profile card */}
-          <div className="card mb-4" style={{background:"linear-gradient(135deg,var(--green-d),var(--green))",border:"none",padding:"32px 24px",textAlign:"center"}}>
-            <div style={{width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.4)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontFamily:"Plus Jakarta Sans",fontWeight:900,fontSize:"2rem",color:"#fff"}}>{initial}</div>
-            <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.25rem",color:"#fff",marginBottom:4}}>{name}</div>
-            <div style={{fontSize:".875rem",color:"rgba(255,255,255,.75)",marginBottom:12}}>{user.phone_number}</div>
+          <div className="card mb-4" style={{background:"linear-gradient(135deg,var(--green-d),var(--green))",
+            border:"none",padding:"32px 24px",textAlign:"center"}}>
+            <div style={{width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,.2)",
+              border:"3px solid rgba(255,255,255,.4)",display:"flex",alignItems:"center",
+              justifyContent:"center",margin:"0 auto 14px",fontFamily:"Plus Jakarta Sans",
+              fontWeight:900,fontSize:"2rem",color:"#fff"}}>{initial}</div>
+            <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.25rem",color:"#fff",marginBottom:4}}>
+              {name}
+            </div>
+            <div style={{fontSize:".875rem",color:"rgba(255,255,255,.75)",marginBottom:12}}>
+              {user.phone_number}
+            </div>
             {isDriver&&(
-              <span style={{background:"rgba(255,255,255,.2)",borderRadius:100,padding:"4px 12px",fontSize:".78rem",color:"rgba(255,255,255,.9)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}>
+              <span style={{background:"rgba(255,255,255,.2)",borderRadius:100,padding:"4px 12px",
+                fontSize:".78rem",color:"rgba(255,255,255,.9)",fontWeight:600,
+                display:"inline-flex",alignItems:"center",gap:5}}>
                 <Shield size={12}/>Verified driver
               </span>
             )}
@@ -62,7 +72,8 @@ export default function ProfilePage(){
             <h3 className="h4 mb-4">Activity</h3>
             <div className="grid-2" style={{gap:12}}>
               {[["Bookings",stats.bookings,"as passenger"],["Trips posted",stats.trips,"as driver"]].map(([l,v,sub])=>(
-                <div key={String(l)} style={{background:"var(--cream)",borderRadius:"var(--r)",padding:"14px 16px",textAlign:"center"}}>
+                <div key={String(l)} style={{background:"var(--cream)",borderRadius:"var(--r)",
+                  padding:"14px 16px",textAlign:"center"}}>
                   <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:900,fontSize:"1.75rem",color:"var(--green)"}}>{v}</div>
                   <div style={{fontWeight:600,fontSize:".875rem"}}>{l}</div>
                   <div className="text-xs text-muted">{sub}</div>
@@ -71,20 +82,51 @@ export default function ProfilePage(){
             </div>
           </div>
 
+          {/* Become a driver — only for passengers */}
+          {!isDriver&&(
+            <div className="card card-p mb-4" style={{border:"2px solid var(--green)",background:"var(--green-p)"}}>
+              <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+                <div style={{width:48,height:48,borderRadius:14,background:"var(--green)",
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"1.4rem"}}>
+                  🚗
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1rem",
+                    color:"var(--green)",marginBottom:4}}>
+                    Become a driver
+                  </div>
+                  <p style={{fontSize:".83rem",color:"var(--muted)",lineHeight:1.5,marginBottom:14}}>
+                    Already driving between cities? Register your vehicle, get approved by admin, and start earning.
+                  </p>
+                  <Link href="/register-vehicle" className="btn btn-primary btn-sm"
+                    style={{display:"inline-flex",borderRadius:10}}>
+                    Register my vehicle
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Download app */}
           <div className="card card-p" style={{background:"var(--green-p)",border:"none"}}>
             <h3 className="h4 mb-2" style={{color:"var(--green)"}}>Get the mobile app</h3>
             <p className="text-sm text-muted mb-4">Same account, richer experience with real-time notifications.</p>
             <div className="flex gap-3 flex-wrap">
-              <a href="#" className="store-btn" style={{flex:1}}><span>🤖</span><div><div style={{fontSize:".6rem",color:"rgba(255,255,255,.6)",textTransform:"uppercase"}}>Get on</div><div style={{fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:".8rem"}}>Google Play</div></div></a>
-              <a href="#" className="store-btn" style={{flex:1}}><span>🍎</span><div><div style={{fontSize:".6rem",color:"rgba(255,255,255,.6)",textTransform:"uppercase"}}>Download on</div><div style={{fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:".8rem"}}>App Store</div></div></a>
+              <a href="#" className="store-btn" style={{flex:1}}><span>🤖</span>
+                <div><div style={{fontSize:".6rem",color:"rgba(255,255,255,.6)",textTransform:"uppercase"}}>Get on</div>
+                <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:".8rem"}}>Google Play</div></div>
+              </a>
+              <a href="#" className="store-btn" style={{flex:1}}><span>🍎</span>
+                <div><div style={{fontSize:".6rem",color:"rgba(255,255,255,.6)",textTransform:"uppercase"}}>Download on</div>
+                <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:".8rem"}}>App Store</div></div>
+              </a>
             </div>
           </div>
         </div>
 
         {/* Right */}
         <div>
-          {/* Account info */}
+          {/* Account details */}
           <div className="card mb-4">
             <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)"}}>
               <h3 className="h4">Account details</h3>
@@ -94,8 +136,12 @@ export default function ProfilePage(){
               {icon:Phone,label:"Phone number",value:user.phone_number},
               {icon:Shield,label:"Account type",value:isDriver?"Driver & Passenger":"Passenger"},
             ].map(({icon:Icon,label,value})=>(
-              <div key={label} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",borderBottom:"1px solid var(--border)"}}>
-                <div style={{width:36,height:36,borderRadius:"var(--r)",background:"var(--green-p)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--green)",flexShrink:0}}><Icon size={16}/></div>
+              <div key={label} style={{display:"flex",alignItems:"center",gap:12,
+                padding:"14px 20px",borderBottom:"1px solid var(--border)"}}>
+                <div style={{width:36,height:36,borderRadius:"var(--r)",background:"var(--green-p)",
+                  display:"flex",alignItems:"center",justifyContent:"center",color:"var(--green)",flexShrink:0}}>
+                  <Icon size={16}/>
+                </div>
                 <div style={{flex:1}}>
                   <div className="text-xs text-muted">{label}</div>
                   <div style={{fontWeight:600,fontSize:".9rem",marginTop:1}}>{value}</div>
@@ -104,7 +150,7 @@ export default function ProfilePage(){
             ))}
           </div>
 
-          {/* Quick navigation */}
+          {/* Quick access */}
           <div className="card mb-4">
             <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)"}}>
               <h3 className="h4">Quick access</h3>
@@ -114,13 +160,15 @@ export default function ProfilePage(){
               {href:"/my-bookings",icon:BookOpen,label:"My bookings",sub:"View all your bookings"},
               {href:"/chat",icon:MessageCircle,label:"Chat",sub:"Messages with drivers & passengers"},
               {href:"/notifications",icon:Bell,label:"Notifications",sub:"Trip updates and alerts"},
-              ...(isDriver?[
-                {href:"/my-trips",icon:Car,label:"My trips",sub:"Manage trips you\'ve posted"},
-                {href:"/post-trip",icon:Car,label:"Post a trip",sub:"Publish a new trip for passengers"},
-              ]:[]),
             ].map(({href,icon:Icon,label,sub})=>(
-              <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",borderBottom:"1px solid var(--border)",textDecoration:"none",color:"inherit",transition:".1s"}} className="card-pressable">
-                <div style={{width:36,height:36,borderRadius:"var(--r)",background:"var(--cream)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--green)",flexShrink:0}}><Icon size={16}/></div>
+              <Link key={href} href={href}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",
+                  borderBottom:"1px solid var(--border)",textDecoration:"none",
+                  color:"inherit",transition:".1s"}} className="card-pressable">
+                <div style={{width:36,height:36,borderRadius:"var(--r)",background:"var(--cream)",
+                  display:"flex",alignItems:"center",justifyContent:"center",color:"var(--green)",flexShrink:0}}>
+                  <Icon size={16}/>
+                </div>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600,fontSize:".9rem"}}>{label}</div>
                   <div className="text-xs text-muted">{sub}</div>
@@ -129,7 +177,9 @@ export default function ProfilePage(){
             ))}
             <div style={{padding:"8px 20px"}}>
               <button onClick={()=>{logout();router.push("/");}}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"10px",borderRadius:"var(--r)",color:"var(--danger)",fontWeight:600,fontSize:".875rem",border:"none",background:"none",cursor:"pointer",width:"100%",transition:".1s"}}>
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px",
+                  borderRadius:"var(--r)",color:"var(--danger)",fontWeight:600,
+                  fontSize:".875rem",border:"none",background:"none",cursor:"pointer",width:"100%"}}>
                 <LogOut size={16}/>Sign out
               </button>
             </div>

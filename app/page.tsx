@@ -1,22 +1,23 @@
 "use client";
-import {useState,useEffect,useRef} from "react";
+import {useState,useEffect} from "react";
 import Link from "next/link";
-import {Search,ArrowRight,Shield,Star,MessageCircle,Clock,Users,TrendingUp,Car,Smartphone,ChevronRight, Plus} from "lucide-react";
+import {Search,ArrowRight,Shield,Star,MessageCircle,Clock,Users,TrendingUp,Car,Smartphone,ChevronRight,Plus} from "lucide-react";
 import TripCard from "./components/TripCard";
-import {api,fmt} from "./lib/api";
 import {useAuth} from "./lib/context";
 
-interface Trip{id:string;origin_city:string;destination_city:string;origin_location?:string;destination_location?:string;departure_time:string;price_per_seat:number;available_seats:number;driver_name:string;driver_rating_average?:number|null;driver_rating_count:number;vehicle_label?:string;}
+const BASE = process.env.NEXT_PUBLIC_API_URL || "https://hola-ride-api-v2.vercel.app";
 
 export default function HomePage(){
   const {user,isDriver}=useAuth();
-  const [trips,setTrips]=useState<Trip[]>([]);
+  const [trips,setTrips]=useState<any[]>([]);
   const [loading,setLoading]=useState(true);
-  const [from,setFrom]=useState("");
-  const [to,setTo]=useState("");
 
   useEffect(()=>{
-    api.get("/trips?limit=6").then(d=>setTrips(Array.isArray(d)?d:d.trips||[])).catch(()=>{}).finally(()=>setLoading(false));
+    fetch(`${BASE}/trips/search?limit=6`)
+      .then(r=>r.json())
+      .then(d=>setTrips(Array.isArray(d)?d:d.trips||[]))
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
   },[]);
 
   return(
@@ -34,28 +35,14 @@ export default function HomePage(){
             <p style={{fontSize:"1.1rem",color:"rgba(255,255,255,.8)",marginBottom:32,lineHeight:1.6}}>
               Find a verified driver going your way. Share the cost, skip the bus terminal. Safe, affordable intercity travel for Cameroon.
             </p>
-            {/* Quick search */}
-            <div style={{background:"#fff",borderRadius:20,padding:20,boxShadow:"0 8px 32px rgba(0,0,0,.2)",display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end"}}>
-              <div style={{flex:"1 1 140px"}}>
-                <label className="label">From</label>
-                <div className="input-group">
-                  <Search size={15} className="icon"/>
-                  <input className="input" placeholder="Yaoundé" value={from} onChange={e=>setFrom(e.target.value)} style={{paddingLeft:36}}/>
-                </div>
-              </div>
-              <div style={{flex:"1 1 140px"}}>
-                <label className="label">To</label>
-                <input className="input" placeholder="Douala" value={to} onChange={e=>setTo(e.target.value)}/>
-              </div>
-              <Link href={`/search${from||to?"?from="+encodeURIComponent(from)+"&to="+encodeURIComponent(to):""}`}
-                className="btn btn-primary btn-lg" style={{flexShrink:0,borderRadius:"var(--r-lg)"}}>
-                <Search size={16}/>Search trips
+            {/* Search button only */}
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <Link href="/search" className="btn btn-lg"
+                style={{background:"#fff",color:"var(--green)",borderRadius:"var(--r-lg)",padding:"14px 28px",fontSize:"1rem",display:"inline-flex",alignItems:"center",gap:8}}>
+                <Search size={18}/>Search trips
               </Link>
-            </div>
-
-            {/* Driver CTA */}
-            <div style={{marginTop:16,display:"flex",gap:12,flexWrap:"wrap"}}>
-              <Link href="/post-trip" className="btn" style={{background:"rgba(255,255,255,.15)",color:"#fff",borderRadius:100,padding:"10px 20px",fontSize:".875rem"}}>
+              <Link href="/post-trip" className="btn btn-lg"
+                style={{background:"rgba(255,255,255,.15)",color:"#fff",borderRadius:"var(--r-lg)",padding:"14px 20px",fontSize:".875rem",display:"inline-flex",alignItems:"center",gap:8}}>
                 <Car size={15}/>Post a trip as driver <ArrowRight size={14}/>
               </Link>
             </div>
@@ -97,7 +84,7 @@ export default function HomePage(){
               <Link href="/post-trip" className="btn btn-primary mt-4">Post a trip</Link>
             </div>
           ):(
-            <div className="grid-3">{trips.map(t=><TripCard key={t.id} trip={t}/>)}</div>
+            <div className="grid-3">{trips.map((t:any)=><TripCard key={t.id} trip={t}/>)}</div>
           )}
         </div>
       </div>
@@ -215,15 +202,13 @@ export default function HomePage(){
             <div>
               <div style={{fontWeight:700,color:"#fff",marginBottom:12,fontSize:".9rem"}}>For passengers</div>
               {[["Search trips","/search"],["My bookings","/my-bookings"],["Chat","/chat"],["Notifications","/notifications"]].map(([l,h])=>(
-                <Link key={l} href={h} style={{display:"block",fontSize:".85rem",padding:"4px 0",transition:".1s"}}
-                  onMouseOver={e=>(e.currentTarget.style.color="#fff")} onMouseOut={e=>(e.currentTarget.style.color="")}>{l}</Link>
+                <Link key={l} href={h} style={{display:"block",fontSize:".85rem",padding:"4px 0"}}>{l}</Link>
               ))}
             </div>
             <div>
               <div style={{fontWeight:700,color:"#fff",marginBottom:12,fontSize:".9rem"}}>For drivers</div>
               {[["Post a trip","/post-trip"],["My trips","/my-trips"],["Profile","/profile"]].map(([l,h])=>(
-                <Link key={l} href={h} style={{display:"block",fontSize:".85rem",padding:"4px 0",transition:".1s"}}
-                  onMouseOver={e=>(e.currentTarget.style.color="#fff")} onMouseOut={e=>(e.currentTarget.style.color="")}>{l}</Link>
+                <Link key={l} href={h} style={{display:"block",fontSize:".85rem",padding:"4px 0"}}>{l}</Link>
               ))}
             </div>
           </div>
