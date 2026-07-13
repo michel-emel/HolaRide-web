@@ -36,7 +36,9 @@ export default function MyBookingsPage(){
   const [ratingSubmitting,setRatingSubmitting]=useState(false);
   const [payingId,setPayingId]=useState<string|null>(null);
   const [payModal,setPayModal]=useState<Booking|null>(null);
-  const [payStep,setPayStep]=useState<"confirm"|"processing"|"success">("confirm");
+  const [payStep,setPayStep]=useState<"confirm"|"processing"|"pending"|"success"|"failed">("confirm");
+  const [payError,setPayError]=useState<string|null>(null);
+  const [payCountdown,setPayCountdown]=useState(300);
 
   useEffect(()=>{
     if(!user){router.push("/login?redirect=/my-bookings");return;}
@@ -64,23 +66,58 @@ export default function MyBookingsPage(){
   }
   function fmtTime(time:string){return time?.slice(0,5)||"";}
 
-  async function simulatePay(){
+  async function startPayment(simulate=false){
     if(!payModal) return;
-    setPayStep("processing");
+    setPayStep("processing"); setPayError(null);
     try{
-      await new Promise(r=>setTimeout(r,2000)); // simulate network delay
-      await api.post(`/bookings/${payModal.id}/dev-force-paid`,{},token);
-      setPayStep("success");
-      // Reload bookings after 2s
-      setTimeout(async()=>{
-        const d=await api.get("/me/bookings",token);
-        setBookings(Array.isArray(d)?d:d.bookings||[]);
-        setPayModal(null);
-        setPayStep("confirm");
-      },2000);
+      if(simulate){
+        await new Promise(r=>setTimeout(r,2000));
+        await api.post(`/bookings/${payModal.id}/dev-force-paid`,{},token);
+        setPayStep("success");
+      } else {
+        await api.post(`/bookings/${payModal.id}/initiate-payment`,{},token);
+        setPayStep("pending");
+        setPayCountdown(300);
+        // countdown
+        const iv=setInterval(()=>setPayCountdown(p=>p>0?p-1:0),1000);
+        // poll status
+        let polls=0;
+        const poll=setInterval(async()=>{
+          polls++;
+          try{
+            const r=await api.get(`/bookings/${payModal.id}/payment-status`,token);
+            const status=r.payment_status;
+            if(status==="success"||status==="paid"){
+              clearInterval(poll);clearInterval(iv);
+              setPayStep("success");
+            } else if(status==="failed"){
+              clearInterval(poll);clearInterval(iv);
+              const reason=r.failure_reason;
+              if(reason==="insufficient_balance"){
+                setPayError("insufficient_balance");
+              } else {
+                setPayError(r.error_message||"Payment failed. Please try again.");
+              }
+              setPayStep("failed");
+            } else if(polls>=60){
+              clearInterval(poll);clearInterval(iv);
+              setPayError("Payment timed out. Please try again.");
+              setPayStep("failed");
+            }
+          }catch(_){}
+        },5000);
+      }
+      // reload on success
+      if(simulate){
+        setTimeout(async()=>{
+          const d=await api.get("/me/bookings",token);
+          setBookings(Array.isArray(d)?d:d.bookings||[]);
+          setPayModal(null); setPayStep("confirm");
+        },2000);
+      }
     }catch(e:unknown){
-      alert(e instanceof Error?e.message:"Payment simulation failed");
-      setPayStep("confirm");
+      setPayError(e instanceof Error?e.message:"Failed to initiate payment");
+      setPayStep("failed");
     }
   }
 
@@ -155,7 +192,7 @@ export default function MyBookingsPage(){
                       <Link href={`/chat/${b.trip_id}`} className="btn btn-ghost btn-sm flex items-center gap-1"><MessageCircle size={13}/>Chat</Link>
                       {b.status==="pending_payment"&&(
                         <button
-                          onClick={()=>{setPayModal(b);setPayStep("confirm");}}
+                          onClick={()=>{setPayModal(b);setPayStep("confirm");setPayError(null);}}
                           className="btn btn-primary btn-sm flex items-center gap-1">
                           <CreditCard size={13}/>Pay {fmt(b.outstanding_balance||b.price_total)}
                         </button>
@@ -195,71 +232,120 @@ export default function MyBookingsPage(){
 
       {/* Payment modal */}
       {payModal&&(
-        <div onClick={e=>{if(e.target===e.currentTarget&&payStep==="confirm"){setPayModal(null);}}}
-          style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:500,
-            display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"#fff",borderRadius:24,padding:28,maxWidth:400,width:"100%",
-            boxShadow:"0 20px 60px rgba(0,0,0,.2)",textAlign:"center"}}>
+        <div onClick={e=>{if(e.target===e.currentTarget&&(payStep==="confirm"||payStep==="failed")){setPayModal(null);setPayStep("confirm");}}}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:500,
+            display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
+          <div style={{background:"#fff",borderRadius:24,padding:28,maxWidth:420,width:"100%",
+            boxShadow:"0 24px 64px rgba(0,0,0,.2)",textAlign:"center"}}>
 
+            {/* CONFIRM */}
             {payStep==="confirm"&&(<>
-              <div style={{width:64,height:64,borderRadius:18,background:"var(--green-p)",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                margin:"0 auto 16px",fontSize:"1.75rem"}}>💳</div>
-              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.2rem",marginBottom:8}}>
+              <div style={{fontSize:"2.5rem",marginBottom:12}}>💳</div>
+              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.25rem",marginBottom:4}}>
                 Confirm payment
               </h3>
-              <p className="text-muted text-sm mb-4">
-                {payModal.departure_city} → {payModal.destination_city}
-              </p>
-              <div style={{background:"var(--cream)",borderRadius:14,padding:"16px 20px",marginBottom:20}}>
-                <div className="text-xs text-muted mb-1">Amount to pay</div>
-                <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:900,
-                  fontSize:"1.75rem",color:"var(--green)"}}>
+              <p className="text-muted text-sm mb-4">{payModal.departure_city} → {payModal.destination_city}</p>
+              <div style={{background:"var(--cream)",borderRadius:16,padding:"20px",marginBottom:20}}>
+                <div className="text-xs text-muted mb-1">Amount due</div>
+                <div style={{fontFamily:"Plus Jakarta Sans",fontWeight:900,fontSize:"2rem",color:"var(--green)"}}>
                   {fmt(payModal.outstanding_balance||payModal.price_total)}
                 </div>
-                <div className="text-xs text-muted mt-1">
-                  {payModal.seats_booked} seat{payModal.seats_booked>1?"s":""} · Mobile Money
+                <div className="text-xs text-muted mt-1">{payModal.seats_booked} seat{payModal.seats_booked>1?"s":""} · Mobile Money</div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <button onClick={()=>startPayment(false)}
+                  style={{padding:"14px",borderRadius:14,border:"none",background:"var(--green)",
+                    color:"#fff",cursor:"pointer",fontWeight:700,fontSize:"1rem",
+                    display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  📱 Pay via Mobile Money
+                </button>
+                <button onClick={()=>startPayment(true)}
+                  style={{padding:"11px",borderRadius:12,border:"1.5px solid #FFD580",
+                    background:"#FFFBEB",cursor:"pointer",fontWeight:600,fontSize:".875rem",color:"#92400E"}}>
+                  🧪 Simulate payment (dev)
+                </button>
+                <button onClick={()=>setPayModal(null)}
+                  style={{padding:"10px",borderRadius:12,border:"1.5px solid var(--border)",
+                    background:"none",cursor:"pointer",fontWeight:600,color:"var(--muted)",fontSize:".875rem"}}>
+                  Cancel
+                </button>
+              </div>
+            </>)}
+
+            {/* PROCESSING */}
+            {payStep==="processing"&&(<>
+              <div className="spinner spinner-g" style={{width:48,height:48,margin:"0 auto 20px"}}/>
+              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.1rem",marginBottom:8}}>
+                Connecting to Mobile Money...
+              </h3>
+              <p className="text-muted text-sm">Please wait.</p>
+            </>)}
+
+            {/* PENDING */}
+            {payStep==="pending"&&(<>
+              <div style={{fontSize:"3rem",marginBottom:12,animation:"pulse 2s infinite"}}>📱</div>
+              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.2rem",marginBottom:8}}>
+                Check your phone
+              </h3>
+              <p className="text-muted text-sm mb-4">
+                A Mobile Money payment request was sent to your phone.<br/>
+                Confirm it to complete the booking.
+              </p>
+              <div style={{background:"var(--cream)",borderRadius:12,padding:"14px",marginBottom:16}}>
+                <div style={{fontFamily:"monospace",fontWeight:800,fontSize:"1.5rem",color:"var(--green)"}}>
+                  {String(Math.floor(payCountdown/60)).padStart(2,"0")}:{String(payCountdown%60).padStart(2,"0")}
                 </div>
+                <div className="text-xs text-muted">remaining to confirm</div>
               </div>
-              <div style={{background:"#FFF3CD",borderRadius:10,padding:"10px 14px",
-                marginBottom:20,fontSize:".8rem",color:"#856404",textAlign:"left"}}>
-                🧪 <strong>Dev mode</strong> — payment will be simulated instantly without Mobile Money.
-              </div>
+              <p className="text-xs text-muted">Checking automatically every 5s...</p>
+            </>)}
+
+            {/* SUCCESS */}
+            {payStep==="success"&&(<>
+              <div style={{width:80,height:80,borderRadius:"50%",background:"var(--green-p)",
+                display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontSize:"2.5rem"}}>✅</div>
+              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.3rem",
+                color:"var(--green)",marginBottom:8}}>Payment confirmed!</h3>
+              <p className="text-muted text-sm mb-6">Your seat is secured. The driver has been notified.</p>
+              <button onClick={()=>{setPayModal(null);setPayStep("confirm");}}
+                className="btn btn-primary btn-block">Done</button>
+            </>)}
+
+            {/* FAILED */}
+            {payStep==="failed"&&(<>
+              {payError==="insufficient_balance"?(<>
+                <div style={{fontSize:"3rem",marginBottom:12}}>💰</div>
+                <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.2rem",color:"var(--danger)",marginBottom:8}}>
+                  Insufficient Balance
+                </h3>
+                <p className="text-muted text-sm mb-4">
+                  Your Mobile Money balance is too low for {fmt(payModal.outstanding_balance||payModal.price_total)}.
+                </p>
+                <div style={{background:"var(--cream)",borderRadius:12,padding:14,marginBottom:20,textAlign:"left"}}>
+                  <div style={{fontWeight:700,fontSize:".875rem",marginBottom:6}}>How to top up:</div>
+                  <div className="text-sm text-muted">• MTN MoMo: Dial <strong>*126#</strong></div>
+                  <div className="text-sm text-muted">• Orange Money: Dial <strong>#150#</strong></div>
+                </div>
+              </>):(<>
+                <div style={{width:64,height:64,borderRadius:"50%",background:"var(--danger-bg)",
+                  display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:"1.75rem"}}>❌</div>
+                <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.2rem",color:"var(--danger)",marginBottom:8}}>
+                  Payment failed
+                </h3>
+                <p className="text-muted text-sm mb-6">{payError||"Something went wrong. Please try again."}</p>
+              </>)}
               <div style={{display:"flex",gap:10}}>
                 <button onClick={()=>setPayModal(null)}
                   style={{flex:1,padding:"12px",borderRadius:12,border:"1.5px solid var(--border)",
                     background:"none",cursor:"pointer",fontWeight:600,color:"var(--muted)"}}>
                   Cancel
                 </button>
-                <button onClick={simulatePay}
+                <button onClick={()=>{setPayStep("confirm");setPayError(null);}}
                   style={{flex:2,padding:"12px",borderRadius:12,border:"none",
-                    background:"var(--green)",color:"#fff",cursor:"pointer",
-                    fontWeight:700,fontSize:".95rem"}}>
-                  Confirm payment
+                    background:"var(--green)",color:"#fff",cursor:"pointer",fontWeight:700}}>
+                  Try again
                 </button>
               </div>
-            </>)}
-
-            {payStep==="processing"&&(<>
-              <div style={{width:64,height:64,borderRadius:"50%",background:"var(--green-p)",
-                display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
-                <div className="spinner spinner-g"/>
-              </div>
-              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.1rem",marginBottom:8}}>
-                Processing payment...
-              </h3>
-              <p className="text-muted text-sm">Please wait while we confirm your payment.</p>
-            </>)}
-
-            {payStep==="success"&&(<>
-              <div style={{width:72,height:72,borderRadius:"50%",background:"var(--green-p)",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                margin:"0 auto 20px",fontSize:"2rem"}}>✅</div>
-              <h3 style={{fontFamily:"Plus Jakarta Sans",fontWeight:800,fontSize:"1.2rem",
-                color:"var(--green)",marginBottom:8}}>Payment confirmed!</h3>
-              <p className="text-muted text-sm">
-                Your booking is now confirmed. The driver has been notified.
-              </p>
             </>)}
           </div>
         </div>
